@@ -87,6 +87,70 @@ class Api:
             return {'success': False, 'error': str(e)}
 
 
+    def import_entries(self, region, entries):
+        """Batch-import entries from Simplify CSV. Skips duplicates by (company, position) key.
+        entries: list of dicts with keys: company, company_type, status, position, apply_date, link
+        Returns: {success, imported, skipped} or {success: False, error}
+        """
+        filepath = self._filepath(region)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = list(csv.reader(f))
+
+            header = next((r for r in lines if 'Position' in r), None)
+            pos_col = header.index('Position') if header and 'Position' in header else None
+
+            # Build existing set of (company_lower, position_lower) for duplicate detection
+            existing = set()
+            for row in lines:
+                if len(row) > 1 and row[1].strip():
+                    company_key = row[1].strip().lower()
+                    pos_key = row[pos_col].strip().lower() if pos_col and len(row) > pos_col else ''
+                    existing.add((company_key, pos_key))
+
+            imported = 0
+            skipped = 0
+
+            for entry in entries:
+                company = entry.get('company', '').strip()
+                position = entry.get('position', '').strip()
+                if not company:
+                    skipped += 1
+                    continue
+
+                key = (company.lower(), position.lower())
+                if key in existing:
+                    skipped += 1
+                    continue
+
+                company_type = entry.get('company_type', 'Other')
+                status = entry.get('status', '🔘 Not Yet')
+                apply_date = entry.get('apply_date', '')
+                link = entry.get('link', '')
+
+                if header:
+                    new_row = [''] * len(header)
+                    new_row[1] = company
+                    new_row[2] = company_type
+                    new_row[3] = status
+                    for col, val in [('Position', position), ('Application Date', apply_date), ('Link', link)]:
+                        if col in header:
+                            new_row[header.index(col)] = val
+                else:
+                    new_row = ['', company, company_type, status, apply_date, position, link, '']
+
+                lines.append(new_row)
+                existing.add(key)
+                imported += 1
+
+            with open(filepath, 'w', encoding='utf-8', newline='') as f:
+                csv.writer(f).writerows(lines)
+
+            return {'success': True, 'imported': imported, 'skipped': skipped}
+        except Exception as e:
+            return {'success': False, 'error': str(e), 'imported': 0, 'skipped': 0}
+
+
     def delete_entry(self, region, company, position):
         filepath = self._filepath(region)
         try:

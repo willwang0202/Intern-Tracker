@@ -14,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
             allIndustries:       'All Industries',
             allStatuses:         'All Statuses',
             addBtn:              'Add New',
+            importBtn:           'Import Simplify',
+            importSuccess:       (n, s) => `Imported ${n} new ${n === 1 ? 'entry' : 'entries'}${s > 0 ? `, skipped ${s} duplicate${s === 1 ? '' : 's'}` : ''}.`,
+            importNone:          'No new entries to import (all duplicates or skipped).',
+            importError:         (msg) => `Import failed: ${msg}`,
+            importInvalidFile:   'Please select a valid Simplify CSV file.',
             // Stats
             statTotal:           'Total Tracked',
             statApplied:         'Applied',
@@ -67,6 +72,11 @@ document.addEventListener('DOMContentLoaded', () => {
             allIndustries:       '所有產業',
             allStatuses:         '所有狀態',
             addBtn:              '新增',
+            importBtn:           '匯入 Simplify',
+            importSuccess:       (n, s) => `已匯入 ${n} 筆新資料${s > 0 ? `，略過 ${s} 筆重複` : ''}。`,
+            importNone:          '沒有新資料可匯入（全部重複或略過）。',
+            importError:         (msg) => `匯入失敗：${msg}`,
+            importInvalidFile:   '請選擇有效的 Simplify CSV 檔案。',
             // Stats
             statTotal:           '總追蹤數',
             statApplied:         '已申請',
@@ -166,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
     setupEventListeners();
     setupModal();
+    setupSimplifyImport();
 
     // Load initial data
     loadDataForRegion(currentRegion);
@@ -599,6 +610,136 @@ document.addEventListener('DOMContentLoaded', () => {
 
             closeModal();
             loadDataForRegion(currentRegion);
+        });
+    }
+
+    // ── Simplify Import ───────────────────────────────────────────────────────
+
+    const SIMPLIFY_STATUS_MAP = {
+        'APPLIED':   '✅ Applied',
+        'SAVED':     '🔘 Not Yet',
+        'WITHDRAWN': '🟡 Awaiting Action',
+        'INTERVIEWING': '🟡 Awaiting Action',
+        'OFFERED':   '✅ Applied',
+        'REJECTED':  '❌ Rejected',
+    };
+
+    // Required Simplify columns
+    const SIMPLIFY_REQUIRED_COLS = ['Job Title', 'Company Name', 'Job URL', 'Status', 'Archived'];
+
+    function convertSimplifyDate(dateStr) {
+        if (!dateStr || dateStr === 'N/A') return '';
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return '';
+        const [year, month, day] = parts;
+        const yy = year.slice(-2);
+        return `${parseInt(month, 10)}/${parseInt(day, 10)}/${yy}`;
+    }
+
+    function isValidSimplifyCSV(fields) {
+        return SIMPLIFY_REQUIRED_COLS.every(col => fields.includes(col));
+    }
+
+    function getTypeForCompany(companyName) {
+        const match = applicationsData.find(
+            d => d.company.toLowerCase() === companyName.toLowerCase()
+        );
+        return match ? match.type : 'Other';
+    }
+
+    function showImportToast(message, isError) {
+        const toast = document.getElementById('import-toast');
+        toast.textContent = message;
+        toast.className = 'import-toast show' + (isError ? ' error' : '');
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => { toast.className = 'import-toast'; }, 4000);
+    }
+
+    function setupSimplifyImport() {
+        const importBtn  = document.getElementById('import-simplify-btn');
+        const fileInput  = document.getElementById('simplify-file-input');
+
+        importBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            fileInput.value = '';   // reset so same file can be re-imported after a fix
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const csvText = e.target.result;
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        const fields = results.meta.fields || [];
+
+                        if (!isValidSimplifyCSV(fields)) {
+                            const invalidMsg = t('importInvalidFile');
+                            showImportToast(typeof invalidMsg === 'function' ? invalidMsg() : invalidMsg, true);
+                            return;
+                        }
+
+                        // Filter and map rows
+                        const entries = [];
+                        for (const row of results.data) {
+                            // Skip archived entries and tutorial/chrome-extension rows
+                            if ((row['Archived'] || '').trim().toLowerCase() === 'yes') continue;
+                            const jobUrl = (row['Job URL'] || '').trim();
+                            if (jobUrl.startsWith('chrome-extension://')) continue;
+
+                            const companyName = (row['Company Name'] || '').trim();
+                            const jobTitle    = (row['Job Title']    || '').trim();
+                            if (!companyName) continue;
+                            // Skip Simplify's own tutorial entry
+                            if (companyName.toLowerCase() === 'simplify') continue;
+
+                            const simplifyStatus = (row['Status'] || '').trim().toUpperCase();
+                            const mappedStatus   = SIMPLIFY_STATUS_MAP[simplifyStatus] || '🔘 Not Yet';
+                            const applyDate      = convertSimplifyDate((row['Applied Date'] || '').trim());
+                            const companyType    = getTypeForCompany(companyName);
+
+                            entries.push({
+                                company:      companyName,
+                                company_type: companyType,
+                                status:       mappedStatus,
+                                position:     jobTitle,
+                                apply_date:   applyDate,
+                                link:         jobUrl,
+                            });
+                        }
+
+                        if (entries.length === 0) {
+                            const noneMsg = t('importNone');
+                            showImportToast(typeof noneMsg === 'function' ? noneMsg() : noneMsg, false);
+                            return;
+                        }
+
+                        try {
+                            const result = await window.pywebview.api.import_entries(currentRegion, entries);
+                            if (!result.success) throw new Error(result.error);
+
+                            const successFn = t('importSuccess');
+                            showImportToast(
+                                typeof successFn === 'function'
+                                    ? successFn(result.imported, result.skipped)
+                                    : successFn,
+                                false
+                            );
+
+                            if (result.imported > 0) loadDataForRegion(currentRegion);
+                        } catch (err) {
+                            const errorFn = t('importError');
+                            showImportToast(
+                                typeof errorFn === 'function' ? errorFn(err.message) : errorFn,
+                                true
+                            );
+                        }
+                    }
+                });
+            };
+            reader.readAsText(file);
         });
     }
 

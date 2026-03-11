@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internship Applications</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="papaparse.min.js"></script>
+</head>
+<body>
+    <div class="background-decor">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1 data-i18n="appTitle">Application Tracker</h1>
+                <div class="header-controls">
+                    <div class="lang-toggle">
+                        <button class="lang-btn active" data-lang="en">EN</button>
+                        <button class="lang-btn" data-lang="zh">中</button>
+                    </div>
+                    <div class="region-tabs">
+                        <button class="tab-btn active" data-region="US" data-i18n="tabUS">United States</button>
+                        <button class="tab-btn" data-region="Taiwan" data-i18n="tabTaiwan">Taiwan</button>
+                    </div>
+                </div>
+            </div>
+            <div class="stats-container" id="stats-container">
+                <!-- Stats will be populated here -->
+            </div>
+        </header>
+
+        <div class="controls-bar">
+            <div class="controls">
+                <input type="text" id="search-input" data-i18n-placeholder="searchPlaceholder" placeholder="Search by company or position...">
+                <select id="type-filter">
+                    <option value="" data-i18n="allIndustries">All Industries</option>
+                </select>
+                <select id="status-filter">
+                    <option value="" data-i18n="allStatuses">All Statuses</option>
+                </select>
+            </div>
+            <button class="btn-primary" id="add-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span data-i18n="addBtn">Add New</span>
+            </button>
+        </div>
+
+        <div class="table-wrapper">
+            <table id="applications-table">
+                <thead>
+                    <tr>
+                        <th data-i18n="thCompany">Company</th>
+                        <th data-i18n="thIndustry">Industry</th>
+                        <th data-i18n="thStatus">Status</th>
+                        <th data-i18n="thPosition">Position</th>
+                        <th data-i18n="thDate">Date</th>
+                        <th data-i18n="thLinks">Links</th>
+                        <th data-i18n="thActions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Rows will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add Application Modal -->
+    <div class="modal-overlay" id="add-modal">
+        <div class="modal-content text-left">
+            <div class="modal-header">
+                <h2 data-i18n="modalTitle">Add Application</h2>
+                <button class="close-btn" id="close-modal">&times;</button>
+            </div>
+            <form id="add-form">
+                <div class="form-group">
+                    <label for="new-company" data-i18n="labelCompany">Company</label>
+                    <div class="autocomplete-wrapper">
+                        <input type="text" id="new-company" required data-i18n-placeholder="companyPlaceholder" placeholder="e.g. Acme Corp" autocomplete="off">
+                        <div class="autocomplete-list" id="company-suggestions"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="new-type" data-i18n="labelIndustry">Industry</label>
+                    <select id="new-type" required>
+                        <option value="" disabled selected data-i18n="selectIndustry">Select industry...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="new-status" data-i18n="labelStatus">Status</label>
+                    <select id="new-status" required>
+                        <option value="✅ Applied"        data-i18n="statusApplied">✅ Applied</option>
+                        <option value="🟡 Awaiting Action" data-i18n="statusAwaiting">🟡 Awaiting Action</option>
+                        <option value="🔘 Not Yet"        data-i18n="statusNotYet">🔘 Not Yet</option>
+                        <option value="❌ Rejected"       data-i18n="statusRejected">❌ Rejected</option>
+                        <option value="🈚️ Not Offered"   data-i18n="statusNotOffered">🈚️ Not Offered</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="new-position" data-i18n="labelPosition">Position</label>
+                    <input type="text" id="new-position" data-i18n-placeholder="positionPlaceholder" placeholder="e.g. Software Engineer Intern">
+                </div>
+                <div class="form-group">
+                    <label for="new-date" data-i18n="labelDate">Date</label>
+                    <div class="date-row">
+                        <input type="text" id="new-date" data-i18n-placeholder="datePlaceholder" placeholder="e.g. 10/24/25">
+                        <button type="button" class="btn-today" id="today-btn" data-i18n="todayBtn">Today</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="new-link" data-i18n="labelLink">Link</label>
+                    <input type="url" id="new-link" placeholder="https://...">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="cancel-btn" data-i18n="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary" data-i18n="saveBtn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

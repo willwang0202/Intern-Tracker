@@ -114,18 +114,12 @@ jobs:
       contents: write   # required to create releases
 
     steps:
-      - name: Read version
+      - name: Derive version from tag
         id: version
-        run: echo "APP_VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
-
-      - name: Check tag matches VERSION
         run: |
-          echo "Tag: ${GITHUB_REF_NAME}"
-          echo "VERSION: v${APP_VERSION}"
-          if [ "v${APP_VERSION}" != "${GITHUB_REF_NAME}" ]; then
-            echo "Tag and VERSION mismatch. Expected tag v${APP_VERSION}."
-            exit 1
-          fi
+          RAW_TAG="${GITHUB_REF_NAME}"       # e.g. v0.1.0
+          STRIPPED="${RAW_TAG#v}"            # 0.1.0
+          echo "APP_VERSION=${STRIPPED}" >> "$GITHUB_ENV"
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v4

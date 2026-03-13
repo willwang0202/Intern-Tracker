@@ -1,0 +1,161 @@
+name: Build & Release
+
+# ── Trigger ───────────────────────────────────────────────────────────────────
+# Push a version tag (e.g. git tag v1.2.3 && git push --tags) to kick off
+# a full build + GitHub Release.
+on:
+  push:
+    tags:
+      - "v*"
+
+# ── Shared env ────────────────────────────────────────────────────────────────
+env:
+  PYTHON_VERSION: "3.11"
+  APP_NAME: "Internship Tracker"
+
+# ═════════════════════════════════════════════════════════════════════════════
+jobs:
+
+  # ── macOS: .app → .dmg ──────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "APP_VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt py2app
+
+      - name: Build with py2app
+        run: python setup.py py2app
+
+      # Create a DMG with a drop-to-Applications layout
+      - name: Package .app into .dmg
+        run: |
+          # Create a staging folder with an Applications symlink
+          mkdir -p dmg_staging
+          cp -R "dist/Internship Tracker.app" dmg_staging/
+          ln -s /Applications dmg_staging/Applications
+
+          hdiutil create \
+            -volname "${{ env.APP_NAME }} v${APP_VERSION}" \
+            -srcfolder dmg_staging \
+            -ov \
+            -format UDZO \
+            "${{ env.APP_NAME }}-macOS-${APP_VERSION}.dmg"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: "${{ env.APP_NAME }}-macOS-${APP_VERSION}.dmg"
+          retention-days: 7
+
+  # ── Windows: one-dir → .zip ──────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "APP_VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller tracker.spec
+
+      - name: Package output folder into .zip
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "dist\Internship Tracker" `
+            -DestinationPath "${{ env.APP_NAME }}-Windows-$env:APP_VERSION.zip"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: "${{ env.APP_NAME }}-Windows-${{ env.APP_VERSION }}.zip"
+          retention-days: 7
+
+  # ── GitHub Release: attach both artifacts ───────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create releases
+
+    steps:
+      - name: Read version
+        id: version
+        run: echo "APP_VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+
+      - name: Check tag matches VERSION
+        run: |
+          echo "Tag: ${GITHUB_REF_NAME}"
+          echo "VERSION: v${APP_VERSION}"
+          if [ "v${APP_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag and VERSION mismatch. Expected tag v${APP_VERSION}."
+            exit 1
+          fi
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: artifacts/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ env.APP_NAME }} v${{ env.APP_VERSION }}"
+          body: |
+            ## Internship Tracker v${{ env.APP_VERSION }}
+
+            ### Downloads
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | macOS    | `Internship Tracker-macOS-${{ env.APP_VERSION }}.dmg` | Open DMG → drag to Applications |
+            | Windows  | `Internship Tracker-Windows-${{ env.APP_VERSION }}.zip` | Unzip → run `Internship Tracker.exe` |
+
+            > **Windows note:** requires [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (pre-installed on Windows 10/11).
+            > **macOS note:** right-click → Open on first launch to bypass Gatekeeper.
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}  # v1.0.0-beta → pre-release
+          files: |
+            artifacts/${{ env.APP_NAME }}-macOS-${{ env.APP_VERSION }}.dmg
+            artifacts/${{ env.APP_NAME }}-Windows-${{ env.APP_VERSION }}.zip

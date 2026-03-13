@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     let applicationsData = [];
-    let currentRegion = 'US';
+    let currentRegion = null;
     let currentLang = 'en';
 
     // ── i18n ──────────────────────────────────────────────────────────────────
@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
             importNone:          'No new entries to import (all duplicates or skipped).',
             importError:         (msg) => `Import failed: ${msg}`,
             importInvalidFile:   'Please select a valid Simplify CSV file.',
+            // Setup
+            setupTitle:          'Welcome to Internship Tracker',
+            setupDesc:           'No CSV files were found. Choose a folder where your tracking data will be saved.',
+            setupChooseBtn:      'Choose Folder',
+            setupError:          (msg) => `Could not set up folder: ${msg}`,
+            // Add Country
+            addCountryTitle:     'Add Country',
+            addCountryFirstTitle:'Add Your First Country',
+            addCountryLabel:     'Country / Region Name',
+            addCountryBtn:       'Add',
+            addCountryPlaceholder: 'e.g. United States',
+            addCountryError:     (msg) => `Could not create country: ${msg}`,
             // Stats
             statTotal:           'Total Tracked',
             statApplied:         'Applied',
@@ -77,6 +89,18 @@ document.addEventListener('DOMContentLoaded', () => {
             importNone:          '沒有新資料可匯入（全部重複或略過）。',
             importError:         (msg) => `匯入失敗：${msg}`,
             importInvalidFile:   '請選擇有效的 Simplify CSV 檔案。',
+            // Setup
+            setupTitle:          '歡迎使用求職追蹤',
+            setupDesc:           '找不到 CSV 檔案，請選擇一個資料夾來儲存追蹤資料。',
+            setupChooseBtn:      '選擇資料夾',
+            setupError:          (msg) => `無法設定資料夾：${msg}`,
+            // Add Country
+            addCountryTitle:     '新增國家',
+            addCountryFirstTitle:'新增第一個國家',
+            addCountryLabel:     '國家／地區名稱',
+            addCountryBtn:       '新增',
+            addCountryPlaceholder: '例：美國',
+            addCountryError:     (msg) => `無法建立國家：${msg}`,
             // Stats
             statTotal:           '總追蹤數',
             statApplied:         '已申請',
@@ -171,16 +195,187 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Initialize UI ─────────────────────────────────────────────────────────
 
+    let openAddCountryModal = null;  // assigned by setupAddCountry()
+
     applyTranslations();
     setupLangToggle();
-    setupTabs();
     setupEventListeners();
     setupModal();
     setupSimplifyImport();
+    setupAddCountry();
 
-    // Load initial data
-    loadDataForRegion(currentRegion);
+    // Load data (after setup check)
+    initApp();
 
+
+    // ── First-run setup ────────────────────────────────────────────────────────
+
+    function initApp() {
+        function doInit() {
+            // Fetch version for UI pill
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.get_version) {
+                window.pywebview.api.get_version().then(ver => {
+                    const el = document.getElementById('app-version');
+                    if (el && ver) {
+                        el.textContent = `v${ver}`;
+                    }
+                }).catch(() => {});
+            }
+
+            window.pywebview.api.get_setup_status().then(status => {
+                if (status.needs_folder) {
+                    openSetupModal();
+                } else if (status.needs_region) {
+                    openAddCountryModal(true);
+                } else {
+                    loadRegionsAndData();
+                }
+            });
+        }
+
+        if (window.pywebview) {
+            doInit();
+        } else {
+            window.addEventListener('pywebviewready', doInit, { once: true });
+        }
+    }
+
+    function openSetupModal() {
+        applyTranslations();
+        const modal     = document.getElementById('setup-modal');
+        const chooseBtn = document.getElementById('choose-folder-btn');
+        const errorEl   = document.getElementById('setup-error');
+
+        modal.classList.add('active');
+
+        chooseBtn.addEventListener('click', async () => {
+            chooseBtn.disabled = true;
+            errorEl.style.display = 'none';
+
+            const result = await window.pywebview.api.pick_csv_folder();
+
+            if (result.success) {
+                modal.classList.remove('active');
+                const regions = await window.pywebview.api.get_regions();
+                if (regions.length === 0) {
+                    openAddCountryModal(true);
+                } else {
+                    loadRegionsAndData();
+                }
+            } else if (!result.cancelled) {
+                const errorFn = t('setupError');
+                errorEl.textContent = typeof errorFn === 'function'
+                    ? errorFn(result.error || 'Unknown error')
+                    : errorFn;
+                errorEl.style.display = 'block';
+                chooseBtn.disabled = false;
+            } else {
+                chooseBtn.disabled = false;
+            }
+        });
+    }
+
+    // ── Dynamic tabs ──────────────────────────────────────────────────────────
+
+    async function loadRegionsAndData() {
+        const regions = await window.pywebview.api.get_regions();
+        if (regions.length > 0 && !currentRegion) {
+            currentRegion = regions.includes('US') ? 'US' : regions[0];
+        }
+        renderTabs(regions);
+        if (currentRegion) loadDataForRegion(currentRegion);
+    }
+
+    function renderTabs(regions) {
+        const container = document.getElementById('region-tabs');
+        container.innerHTML = '';
+
+        regions.forEach(region => {
+            const btn = document.createElement('button');
+            btn.className = 'tab-btn' + (region === currentRegion ? ' active' : '');
+            btn.dataset.region = region;
+            btn.textContent = region;
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentRegion = region;
+                loadDataForRegion(region);
+            });
+            container.appendChild(btn);
+        });
+
+        // "+" add-country button
+        const addBtn = document.createElement('button');
+        addBtn.className = 'tab-btn tab-add-btn';
+        addBtn.textContent = '+';
+        addBtn.title = t('addCountryTitle');
+        addBtn.addEventListener('click', () => openAddCountryModal(false));
+        container.appendChild(addBtn);
+    }
+
+    // ── Add Country modal ─────────────────────────────────────────────────────
+
+    function setupAddCountry() {
+        const modal      = document.getElementById('add-country-modal');
+        const titleEl    = document.getElementById('add-country-title');
+        const labelEl    = document.getElementById('add-country-label');
+        const nameInput  = document.getElementById('new-country-name');
+        const closeBtn   = document.getElementById('close-add-country');
+        const cancelBtn  = document.getElementById('cancel-add-country');
+        const confirmBtn = document.getElementById('confirm-add-country');
+        const errorEl    = document.getElementById('add-country-error');
+        let mandatory    = false;
+
+        openAddCountryModal = function(isMandatory) {
+            mandatory = isMandatory;
+            nameInput.value = '';
+            errorEl.style.display = 'none';
+            titleEl.textContent  = t(mandatory ? 'addCountryFirstTitle' : 'addCountryTitle');
+            labelEl.textContent  = t('addCountryLabel');
+            nameInput.placeholder = t('addCountryPlaceholder');
+            confirmBtn.textContent = t('addCountryBtn');
+            cancelBtn.textContent  = t('cancelBtn');
+            closeBtn.style.display  = mandatory ? 'none' : '';
+            cancelBtn.style.display = mandatory ? 'none' : '';
+            modal.classList.add('active');
+            nameInput.focus();
+        };
+
+        function closeModal() {
+            if (mandatory) return;
+            modal.classList.remove('active');
+        }
+
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmBtn.click(); });
+
+        confirmBtn.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            confirmBtn.disabled = true;
+            errorEl.style.display = 'none';
+
+            const result = await window.pywebview.api.create_region(name);
+            confirmBtn.disabled = false;
+
+            if (result.success) {
+                modal.classList.remove('active');
+                currentRegion = name;
+                const regions = await window.pywebview.api.get_regions();
+                renderTabs(regions);
+                loadDataForRegion(name);
+            } else {
+                const errFn = t('addCountryError');
+                errorEl.textContent = typeof errFn === 'function'
+                    ? errFn(result.error)
+                    : result.error;
+                errorEl.style.display = 'block';
+            }
+        });
+    }
 
     function loadDataForRegion(region) {
         function doLoad() {
@@ -260,18 +455,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderTable(applicationsData);
     }
 
-    function setupTabs() {
-        const tabBtns = document.querySelectorAll('.tab-btn');
-        tabBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                tabBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-
-                currentRegion = btn.dataset.region;
-                loadDataForRegion(currentRegion);
-            });
-        });
-    }
 
     function populateFilters() {
         const types = [...new Set(applicationsData.map(d => d.type).filter(t => t))].sort();

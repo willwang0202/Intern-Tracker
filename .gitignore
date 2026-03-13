@@ -1,9 +1,39 @@
-# CSV files
+# CSV files (data)
 csv/Login Credentials-Login Credentials.csv
 csv/Taiwan-Internship Applications Log.csv
 csv/US-Internship Applications Log.csv
 
-# Resumes
-Chen-An Wang UCSD Data Science Resume US.pdf
-Chen-An Wang UCSD Data Science Resume 履歷.pdf
-王宸安_加州大學聖地牙哥分校_實習_履歷.pdf
+# Local config (stores csv_dir path)
+.tracker_config.json
+
+# Build / dist and non-source artifacts
+dist/
+build/
+.eggs/
+*.egg
+*.egg-info/
+*.spec.bak
+dmg_staging/
+*.dmg
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+env/
+.pytest_cache/
+.mypy_cache/
+*.manifest
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+

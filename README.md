@@ -30,7 +30,10 @@ Intern-Tracker/
 ├── dashboard.js            # All frontend logic + i18n system
 ├── styles.css              # Styles
 ├── papaparse.min.js        # CSV parsing library
-├── Launch Dashboard.command  # macOS double-click launcher
+├── main.py                    # Entry point (run this or use launcher)
+├── setup.py                   # py2app packaging (macOS)
+├── Launch Dashboard.command   # macOS double-click launcher (development)
+├── Package App.command        # macOS double-click to build .app
 └── csv/                    # Data directory (gitignored)
     ├── US-Internship Applications Log.csv
     └── Taiwan-Internship Applications Log.csv
@@ -52,10 +55,21 @@ pip install pywebview
 ### Running the App
 
 ```bash
-python app.py
+python main.py
 ```
 
 Or on macOS, double-click `Launch Dashboard.command`.
+
+### Packaging as a standalone app (macOS)
+
+To build a distributable `.app` with [py2app](https://py2app.readthedocs.io/) (no Python required for end users):
+
+```bash
+pip install -r requirements.txt py2app
+python setup.py py2app
+```
+
+Or double-click `Package App.command`. The app is created at `dist/Internship Tracker.app`.
 
 ### CSV Format
 
